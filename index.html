@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ROARING SINS: VALORANT PROTOCOL</title>
+    <style>
+        @font-face { font-family: 'Pixel'; src: url('https://fonts.cdnfonts.com/s/16218/DeterminationMonoWeb.woff') format('woff'); }
+        :root { --main: #fff; --bg: #0f1923; /* Valorant koyu lacivert */ --accent: #ff4655; /* Valorant kırmızısı */ }
+        
+        body, html { margin: 0; padding: 0; height: 100%; background: var(--bg); color: white; font-family: 'Pixel', sans-serif; overflow: hidden; }
+
+        /* Sohbet Ekranı */
+        #chat-window { height: calc(100vh - 250px); overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 12px; background: #000; border-bottom: 2px solid #333; }
+        .msg { max-width: 85%; padding: 12px; border: 2px solid #fff; border-radius: 8px; font-size: 0.85rem; line-height: 1.4; animation: fadeIn 0.3s; }
+        .bot { align-self: flex-start; border-color: var(--accent); background: #1a0508; }
+        .user { align-self: flex-end; border-color: #555; background: #111; }
+
+        /* Alt Panel */
+        .panel { position: fixed; bottom: 0; left: 0; right: 0; background: #0f1923; border-top: 4px solid var(--accent); padding: 10px; height: 190px; z-index: 100; transition: border-color 0.3s; }
+        #stats { display: flex; justify-content: space-between; padding: 10px; border-bottom: 2px solid #333; font-size: 0.8rem; background: #0f1923; color: var(--accent); transition: color 0.3s; }
+        
+        .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+        .btn { background: #000; color: #fff; border: 2px solid #fff; padding: 10px 5px; cursor: pointer; font-family: 'Pixel'; font-size: 0.65rem; text-transform: uppercase; transition: 0.2s; }
+        .btn:active { background: #fff; color: #000; }
+        .btn:hover { border-color: var(--accent); }
+
+        /* Seçim Ekranı ve Modallar */
+        #selector, #joke-modal { position: fixed; inset: 0; background: rgba(15, 25, 35, 0.98); z-index: 2000; padding: 20px; overflow-y: auto; text-align: center; }
+        #joke-modal { display: none; }
+        
+        /* Karakter Listesi Grid'i */
+        .char-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 20px; padding-bottom: 40px; }
+        .agent-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 15px 5px; background: #000; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body>
+
+<div id="selector">
+    <h1 style="color: #ff4655; text-shadow: 2px 2px #000; font-size: 1.8rem; border-bottom: 2px solid #ff4655; padding-bottom: 10px;">PROTOCOL: GIRLS</h1>
+    <p style="font-size: 0.8rem; color: #aaa;">Bir ajan seç ve operasyona başla...</p>
+    <div class="char-grid" id="char-list"></div>
+</div>
+
+<div id="stats">
+    <div id="st-name">AJAN: -</div>
+    <div id="st-rel">BAĞ: YOK</div>
+    <div id="st-meters">L:0% | LV:0% | H:0%</div>
+</div>
+
+<div id="chat-window"></div>
+
+<div class="panel">
+    <div id="dynamic-actions" class="grid"></div>
+</div>
+
+<div id="joke-modal">
+    <h2 id="modal-title" style="color:var(--accent);">SELECTOR</h2>
+    <div id="modal-desc" style="margin-bottom:10px; font-size:0.8rem;"></div>
+    
+    <div id="modal-input-area" style="display:none; margin-bottom:15px;">
+        <input type="number" id="size-input" min="1" max="99" style="background:#000; color:var(--accent); border:2px solid var(--accent); padding:10px; font-family:'Pixel'; width:80px; text-align:center; font-size:1.2rem;" placeholder="cm">
+        <br><br>
+        <button class="btn" style="width: 100%; border-color: var(--accent); color: var(--accent);" onclick="submitSize()">SİLAHI GÖSTER</button>
+    </div>
+    
+    <div class="char-grid" style="grid-template-columns: 1fr;" id="modal-content"></div>
+    <button class="btn" style="margin-top:20px; width:100%; border-color: #555; color: #aaa;" onclick="closeModals()">İPTAL / GERİ</button>
+</div>
+
+<script>
+// AJAN VERİTABANI (Renkleri ve Kişilik Tipleriyle)
+const VAL_CHARS = [
+    { n: "Jett", c: "#87CEFA", p: "Playful", m: "Çok yavaşsın! Hadi biraz hızlanalım. 🌪️" },
+    { n: "Sage", c: "#50C878", p: "Soft", m: "Benim görevim korumak... Ama sen farklısın. 💚" },
+    { n: "Viper", c: "#32CD32", p: "Dom", m: "Zehirimden korkmuyor musun? Göreceğiz... 🐍" },
+    { n: "Reyna", c: "#800080", p: "Dom", m: "Ah... Kalbinin atışını duyabiliyorum. 💜" },
+    { n: "Killjoy", c: "#FFD700", p: "Soft", m: "Bütün hesaplamalarım... Senin yanındayken şaşıyor. 🤖" },
+    { n: "Raze", c: "#FFA500", p: "Playful", m: "Hadi ortalığı biraz havaya uçuralım tatlım! 💣" },
+    { n: "Astra", c: "#DA70D6", p: "Soft", m: "Yıldızlar bizim karşılaşacağımızı söylüyordu... ✨" },
+    { n: "Neon", c: "#0000FF", p: "Playful", m: "Elektriklenmeye hazır mısın? Çarpılma da! ⚡" },
+    { n: "Fade", c: "#4B0082", p: "Dom", m: "Kabuslarından kaçamazsın. Bana teslim ol... 👁️" },
+    { n: "Deadlock", c: "#E0FFFF", p: "Dom", m: "Ağıma düştün. Artık benim kurallarıma tabisin. 🕸️" },
+    { n: "Vyse", c: "#B19CD9", p: "Dom", m: "Metal soğuktur ama sen... Sen ısınıyorsun. ⚙️" }
+];
+
+// DİYALOG BANKASI (Her eylem için 5 farklı cevap)
+const DIALOGUE_BANK = {
+    Soft: {
+        "Sohbet": ["Seninle konuşmak çok rahatlatıcı.", "Bana kendinden daha çok bahset lütfen.", "Sesin... bana huzur veriyor.", "Savaş alanından uzakta böyle anlar çok değerli.", "Seni dinlemeyi seviyorum."],
+        "İltifat": ["Yaa... (kızarır) Gerçekten böyle mi düşünüyorsun?", "Beni çok utandırıyorsun...", "Teşekkür ederim, kalbim çok hızlı çarpıyor.", "Sen de harikasın, biliyorsun değil mi?", "Bu sözler günümü aydınlattı."],
+        "Elini Tut": ["Ellerin ne kadar sıcak...", "*Parmaklarını seninkilere kenetler.*", "Lütfen beni hiç bırakma.", "Sadece elini tutmak bile güvende hissettiriyor.", "Cildin çok yumuşak..."],
+        "Saçını Okşa": ["Mm... bu çok hoşuma gidiyor.", "Gözlerim kapanıyor, çok rahatlatıcı.", "Daha fazla yapabilir misin lütfen?", "Kendimi kedicik gibi hissediyorum...", "*Başını eline doğru yaslar.*"],
+        "Masaj Yap": ["Ah... omuzlarım çok gergindi, iyi geldi.", "Ellerin sihirli gibi.", "Bütün yorgunluğum akıp gidiyor.", "Biraz daha aşağıya iner misin?", "Beni bu kadar şımartmamalısın..."],
+        "Öp": ["Dudakların çok tatlı...", "Bu... benim için bir ilk gibi hissettiriyor.", "*Gözlerini kapatıp sana karşılık verir.*", "Nefesim kesildi...", "Seni çok seviyorum."],
+        "Kucağa Al": ["Ah! Birden havalanınca korktum!", "Senin kollarında çok küçücük hissediyorum.", "Kalp atışlarını buradan duyabiliyorum.", "Beni sıkıca tut, düşürme beni.", "Çok güçlüsün..."],
+        "Ağzına Alma": ["U-um... umarım bunu doğru yapıyorumdur.", "(Gok gok)... tadı beklediğimden güzel.", "Seni böyle mutlu görmek... beni de mutlu ediyor.", "*Gözleri yaşararak sana alttan bakar.*", "Öhö... biraz derine gittim galiba, özür dilerim."],
+        "Sokmalı": ["Lütfen... canımı çok yakma olur mu?", "Ah! İçim çok dolu hissettiriyor...", "Seninle tamamen birleşmek harika bir his.", "Daha yavaş... evet, tam böyle...", "Sıcaklığın içimi eritiyor..."],
+        "Ayakta": ["Bacaklarım titriyor, beni sıkı tut!", "Düşecekmişim gibi hissediyorum...", "Sana yaslanmak çok heyecan verici.", "Duvar çok soğuk ama sen çok sıcaksın.", "Nefes alamıyorum, çok derin!"],
+        "Arkadan": ["Bu açıdan çok derine iniyorsun!", "Ah! Boynumu öpmen çok hoşuma gidiyor...", "Saçımı çekme lütfen, sadece sarıl...", "Titriyorum... duramıyorum!", "İçimde her hareketini hissediyorum..."]
+    },
+    Dom: {
+        "Sohbet": ["Beni dinlemeyi öğrenmen iyi bir başlangıç.", "Kısa kes, vaktim değerli.", "İlginç birisin... belki seni biraz daha hayatta tutarım.", "Gözlerimin içine bakarak konuş.", "Sözlerin fena değil, eylemlerini de göreceğiz."],
+        "İltifat": ["Bana bilmediğim bir şey söyle.", "Heh, bana yaranmaya mı çalışıyorsun?", "Güzel kelimeler seni kurtarmaz.", "Boyun eğdiğini görmek hoşuma gidiyor.", "Sadakatin takdire şayan."],
+        "Elini Tut": ["Ellerimi sadece ben izin verirsem tutabilirsin.", "Sıkı tut, gevşemesine izin verme.", "Avuçların terliyor... korkuyor musun yoksa heyecanlı mı?", "Benimle yürürken arkamda kalma.", "Heh, fena hissettirmiyor."],
+        "Saçını Okşa": ["Dokunmana izin verdim, şımarma.", "Ellerini oradan çekersen sonun kötü olur, devam et.", "Sakinleştiğimi sanma.", "Tırnaklarınla hafifçe kazı...", "Bunu sadece sana yaptırıyorum, değerini bil."],
+        "Masaj Yap": ["İşte böyle... bana hizmet et.", "Daha sert bas! Gücün yetmiyor mu?", "Aferin, işe yarıyorsun.", "Eğer iyi yaparsan seni ödüllendirebilirim.", "Omuzlarımdaki yükü sen alacaksın."],
+        "Öp": ["Sadece izin verdiğimde öpebilirsin.", "Isırmamam için dua et.", "*Seni kendine çekip agresifçe öper.*", "Nefesin kesilene kadar bırakmayacağım.", "Daha sert! Bana boyun eğdiğini hissettir."],
+        "Kucağa Al": ["Beni taşıyabileceğine emin misin zayıf şey?", "Heh, beni omuzlamak hoşuna mı gitti?", "Eğer beni düşürürsen bacaklarını kırarım.", "İyi iş... şimdi yatağa doğru yürü.", "Bana hükmettiğini sanma, sadece yerimi değiştiriyorsun."],
+        "Ağzına Alma": ["Heh... diz çöküp bunu yapmamı gerçekten hak ettin mi?", "Tadına bakacağım... şimdilik.", "(Gok gok)... bunu seviyorsun değil mi zavallı?", "Boğulacağımı sanma, hepsini alabilirim.", "Bana bakarak izle..."],
+        "Sokmalı": ["Daha sert! Bana acıma!", "Heh, beklediğimden daha iyisin.", "İşte böyle, bana tamamen itaat et.", "İçimdeki ateşinle yan!", "Kesintisiz devam et, durmana izin vermedim."],
+        "Ayakta": ["Beni duvara yasla ve ne kadar erkek olduğunu göster!", "Bacaklarımı beline doladım, beni hayal kırıklığına uğratma.", "Havada becerilmek hoşuma gidiyor... durma!", "Ağırlığımı kaldırabilecek misin göreceğiz.", "Daha derine, beni tamamen delip geç!"],
+        "Arkadan": ["Evet... bu pozisyon sana uygun. Arkamda kal.", "Kalçalarımı sıkıca tut ve sertçe vur!", "Benim kontrolümde olduğunu unutma.", "Darbe seslerimiz bütün üste yankılansın!", "Heh... inlememek için zor tutuyorum kendimi."]
+    },
+    Playful: {
+        "Sohbet": ["Hahaha! Ciddi misin? Çok komiksin!", "Sus da biraz eyleme geçelim tatlım!", "Seninle takılmak çok eğlenceli ya.", "Anlattıkların cidden çılgınca!", "Biraz daha anlatsana, merak ettim."],
+        "İltifat": ["Ooo, laf yapmayı da biliyormuşuz!", "Bunu herkese söylüyor musun bakayım?", "Egomu okşamak işe yarıyor, devam et! 😉", "Şımartıyorsun beni! Daha çok yap!", "Hehehe, yanaklarım kızardı sanırım."],
+        "Elini Tut": ["Ooo, romantik serseri seni!", "*Elini sıkıp sallamaya başlar.*", "Eee, şimdi nereye koşuyoruz?", "Ellerin bayağı büyükmüş ha!", "Yakalandım! Artık kaçamam."],
+        "Saçını Okşa": ["Hey, saçımı bozacaksın! ...Ama fena değilmiş.", "Biraz daha yukarı... heh, tam orası!", "Beni mayıştırıyorsun, uyuyup kalırsam suçlusu sensin.", "Köpek yavrusu muyum ben? Hav!", "Hoşuma gitti, durma sakın."],
+        "Masaj Yap": ["Oh be! Dünyavarmış yemin ederim.", "Çok iyi! Spordan sonra bu şarttı.", "Vay canına, gizli bir yeteneğin mi var?", "Biraz da sırtıma doğru inebilir miyiz?", "Eriyorum şu an... cıvık bir pelteden ibaretim."],
+        "Öp": ["Tuttum seni! Muaah!", "Ooo, hızlı davranıyorsun!", "Nefes alamadım bir an hahaha!", "Dudakların tam dişlemelik.", "Bir daha yapalım! Hadi!"],
+        "Kucağa Al": ["Yuppi! Uçuyorum!", "Beni ne kadar uzağa fırlatabilirsin? Şaka şaka!", "Atın beni denizlere! Hahaha!", "Oha baya güçlüymüşsün, kaslarını sevdim.", "Beni yatağa fırlatmanı bekliyorum kaptan!"],
+        "Ağzına Alma": ["Eee, bu lollipop biraz büyükmüş!", "Nefesim kesilecek hahaha!", "(Gok gok)... beceriksiz olduğumu sanma!", "Tadını sevdim, fena değilmiş.", "Bana bakarken yüzün çok komik oluyor!"],
+        "Sokmalı": ["Hooop! Biraz yavaş ol şampiyon!", "A-ah... beklediğimden çok daha iyi!", "Zıplamaya devam et! Çok eğlenceli!", "Hız sınırını aşıyoruz tatlım, durma!", "Çok sıcak! İçim yanıyor!"],
+        "Ayakta": ["Beni düşürme sakın ha!", "Vay canına, lunapark aleti gibi hahaha!", "Duvarda iz bırakacağız benden söylemesi.", "Zıplamama izin ver!", "Çok enerjik! Bayıldım buna!"],
+        "Arkadan": ["Ooo, manzarayı sevdin mi arkadan?", "Sert ol! Dayanabilirim!", "Popoma şaplak atmanı bekliyorum! Hahaha!", "Tam isabet! Aynen böyle devam!", "Sesim çok mu çıkıyor? Boşver!"]
+    }
+};
+
+let cur = null, love = 0, lust = 0, haz = 0, isSevgili = false;
+
+// SİSTEM FONKSİYONLARI
+function saveGame() {
+    const saveData = { curName: cur.n, love, lust, haz, isSevgili };
+    localStorage.setItem('valSinsSave', JSON.stringify(saveData));
+}
+
+function loadGame() {
+    const saved = localStorage.getItem('valSinsSave');
+    if (saved) {
+        const data = JSON.parse(saved);
+        cur = VAL_CHARS.find(x => x.n === data.curName);
+        if (cur) {
+            love = data.love; lust = data.lust; haz = data.haz; isSevgili = data.isSevgili;
+            document.getElementById('selector').style.display = 'none';
+            document.documentElement.style.setProperty('--accent', cur.c);
+            document.getElementById('st-name').innerText = "AJAN: " + cur.n;
+            addMsg("* Veri kurtarıldı. Operasyon devam ediyor.", 'bot');
+            renderMainPanel();
+            updateUI(false);
+        }
+    }
+}
+
+function loadCharacters() {
+    const list = document.getElementById('char-list');
+    list.innerHTML = "";
+    VAL_CHARS.forEach(char => {
+        let pLabel = char.p === "Dom" ? "😈 DOM" : char.p === "Soft" ? "💚 SOFT" : "🔥 PLAYFUL";
+        list.innerHTML += `<button class="btn agent-btn" style="border-color:${char.c}; color:${char.c}" onclick="start('${char.n}')">
+            <span style="font-size: 1.2rem; margin-bottom: 5px;">${char.n}</span>
+            <small>${pLabel}</small>
+        </button>`;
+    });
+}
+
+function start(name) {
+    cur = VAL_CHARS.find(x => x.n === name);
+    document.getElementById('selector').style.display = 'none';
+    document.documentElement.style.setProperty('--accent', cur.c);
+    document.getElementById('st-name').innerText = "AJAN: " + cur.n;
+    love = 0; lust = 0; haz = 0; isSevgili = false;
+    document.getElementById('chat-window').innerHTML = ""; // Ekranı temizle
+    addMsg(cur.n + ": " + cur.m, 'bot');
+    renderMainPanel();
+    updateUI();
+}
+
+function renderMainPanel() {
+    const panel = document.getElementById('dynamic-actions');
+    panel.innerHTML = `
+        <button class="btn" onclick="openGirlMenu('ACT')">ACT (NORMAL)</button>
+        <button class="btn" onclick="openGirlMenu('EXTRA')">EXTRA (18+)</button>
+        <button class="btn" style="border-color:#0f0; color:#0f0;" onclick="openShowMenu()">SİLAH GÖSTER</button>
+        <button class="btn" style="border-color:#24A1DE; color:#24A1DE;" onclick="window.open('https://t.me/+Zu1-BqdP2sNjZTE0')">TELEGRAM</button>
+        <button class="btn" style="border-color:#ff9000; color:#ff9000;" onclick="window.open('https://rule34.xxx')">R34 ARAŞTIR</button>
+        <button id="marry-btn" class="btn" style="color:#ff4655; border-color:#ff4655;" onclick="marry()">BAĞ KUR (SEVGİLİ)</button>
+        <button class="btn" style="border-color: #555; color:#aaa; grid-column: span 3;" onclick="resetGame()">AJAN DEĞİŞTİR / GERİ DÖN</button>
+    `;
+}
+
+function updateUI(shouldSave = true) {
+    document.getElementById('st-meters').innerText = `LUST:${lust}% | LOVE:${love}% | HAZ:${haz}%`;
+    document.getElementById('st-rel').innerText = "BAĞ: " + (isSevgili ? "MÜHÜRLENDİ ❤️" : "YOK");
+    const mBtn = document.getElementById('marry-btn');
+    if(mBtn) mBtn.style.display = (love>=50 && !isSevgili) ? 'block' : 'none';
+    if(shouldSave && cur) saveGame();
+}
+
+function addMsg(t, type) {
+    const win = document.getElementById('chat-window');
+    const d = document.createElement('div');
+    d.className = `msg ${type}`;
+    d.innerText = t;
+    win.appendChild(d);
+    win.scrollTop = win.scrollHeight;
+}
+
+// AKSİYON MODALLARI
+function openShowMenu() {
+    const modal = document.getElementById('joke-modal');
+    document.getElementById('modal-title').innerText = "SİLAH BOYUTU";
+    document.getElementById('modal-desc').innerText = "Santim gir (Ajanın tepkisi değişecek)";
+    document.getElementById('modal-input-area').style.display = 'block';
+    document.getElementById('modal-content').innerHTML = "";
+    modal.style.display = 'block';
+}
+
+function submitSize() {
+    const val = parseInt(document.getElementById('size-input').value);
+    if(isNaN(val)) return;
+    closeModals();
+    addMsg(`* (${val}cm olduğunu gösterdin.)`, 'user');
+    
+    setTimeout(() => {
+        let resp = "";
+        if(val <= 12) {
+            resp = cur.p === "Soft" ? "Küçük ama işlevi önemlidir bence... 😳" : cur.p === "Dom" ? "Heh. Bu oyuncak tabancayla mı beni vuracaksın? 🤣" : "Ayy çok tatlı! Kısa namlulu Classic gibi! 😂";
+        } else if(val <= 18) {
+            resp = cur.p === "Soft" ? "Tam ideal... Korkutucu değil. ❤️" : cur.p === "Dom" ? "İyi bir Vandal sayılır. İş görür." : "Phantom gibi! Sessiz ve ölümcül, beğendim! 😏";
+        } else {
+            resp = cur.p === "Soft" ? "Aman Tanrım! Operator falan mı bu?! ✨" : cur.p === "Dom" ? "Vay canına... Bu Odin ile beni deşebilirsin. 😈" : "Oha oha! Odin'den bile büyük bu, sakla onu! 🥵";
+            lust += 30;
+        }
+        addMsg(cur.n + ": " + resp, 'bot');
+        updateUI();
+    }, 600);
+}
+
+function openGirlMenu(type) {
+    const modal = document.getElementById('joke-modal');
+    const content = document.getElementById('modal-content');
+    document.getElementById('modal-title').innerText = type + " SEÇENEKLERİ";
+    document.getElementById('modal-input-area').style.display = 'none';
+    modal.style.display = 'block';
+    content.innerHTML = "";
+    
+    let opts = [];
+    if(type === 'ACT') {
+        opts = ["Sohbet", "İltifat", "Elini Tut", "Saçını Okşa", "Masaj Yap"];
+    } else if (type === 'EXTRA') {
+        if(!isSevgili || lust < 50) {
+            content.innerHTML = "<p style='color:#ff4655;'>KİLİTLİ! (Sevgili ol & %50 Lust gerekli)</p>";
+            return;
+        }
+        opts = ["Öp", "Kucağa Al", "Ağzına Alma", "Sokmalı", "Ayakta", "Arkadan"];
+    }
+    
+    opts.forEach(o => content.innerHTML += `<button class="btn" style="border-color:var(--accent); color:var(--accent);" onclick="handleGirlAction('${o}')">${o}</button>`);
+}
+
+function handleGirlAction(opt) {
+    closeModals();
+    addMsg(`* (${opt} eylemini uyguladın.)`, 'user');
+    setTimeout(() => {
+        const pool = DIALOGUE_BANK[cur.p][opt];
+        const randomResp = pool ? pool[Math.floor(Math.random() * pool.length)] : "İlginç...";
+        
+        lust += 10; love += 5;
+        if(opt === "Sokmalı" || opt === "Ayakta" || opt === "Arkadan") haz += 25;
+        
+        addMsg(cur.n + ": " + randomResp, 'bot');
+        updateUI();
+    }, 500);
+}
+
+function marry() { isSevgili = true; love = 100; addMsg(cur.n + ": Artık birbirimize mühürlendik... ❤️", 'bot'); updateUI(); }
+function closeModals() { document.getElementById('joke-modal').style.display = 'none'; }
+function resetGame() { localStorage.removeItem('valSinsSave'); location.reload(); }
+
+// BAŞLATMA
+loadCharacters();
+loadGame();
+</script>
+</body>
+</html>
